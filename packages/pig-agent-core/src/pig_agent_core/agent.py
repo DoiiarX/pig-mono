@@ -31,6 +31,7 @@ class Agent:
         max_iterations: int = 10,
         on_tool_start: Callable | None = None,
         on_tool_end: Callable | None = None,
+        on_tool_call_delta: Callable | None = None,
         verbose: bool = False,
         # Enhanced subsystem parameters
         profile_manager: ProfileManager | None = None,
@@ -52,6 +53,7 @@ class Agent:
             max_iterations: Maximum tool calling iterations (deprecated, use max_rounds)
             on_tool_start: Callback when tool starts
             on_tool_end: Callback when tool ends
+            on_tool_call_delta: Callback for streaming tool_calls increments during LLM generation
             verbose: Enable verbose logging
             profile_manager: Optional profile manager for resilience
             event_callback: Optional callback for observability events
@@ -69,6 +71,7 @@ class Agent:
         self.max_rounds_with_plan = max_rounds_with_plan
         self.on_tool_start = on_tool_start
         self.on_tool_end = on_tool_end
+        self.on_tool_call_delta = on_tool_call_delta
         self.verbose = verbose
 
         # Enhanced subsystems
@@ -296,6 +299,16 @@ class Agent:
                     if chunk.content:
                         response_content += chunk.content
                     if hasattr(chunk, "tool_calls") and chunk.tool_calls:
+                        # 触发流式 tool_calls 回调（如果有）
+                        if self.on_tool_call_delta:
+                            try:
+                                if asyncio.iscoroutinefunction(self.on_tool_call_delta):
+                                    await self.on_tool_call_delta(chunk.tool_calls)
+                                else:
+                                    self.on_tool_call_delta(chunk.tool_calls)
+                            except Exception as e:
+                                self._log(f"on_tool_call_delta callback failed: {e}")
+
                         response_tool_calls = chunk.tool_calls
 
                 # Track billing if hook provided
