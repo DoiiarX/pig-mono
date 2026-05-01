@@ -32,6 +32,7 @@ class Agent:
         on_tool_start: Callable | None = None,
         on_tool_end: Callable | None = None,
         on_tool_call_delta: Callable | None = None,
+        on_text_delta: Callable | None = None,
         verbose: bool = False,
         # Enhanced subsystem parameters
         profile_manager: ProfileManager | None = None,
@@ -54,6 +55,7 @@ class Agent:
             on_tool_start: Callback when tool starts
             on_tool_end: Callback when tool ends
             on_tool_call_delta: Callback for streaming tool_calls increments during LLM generation
+            on_text_delta: Callback for streaming text content chunks during LLM generation
             verbose: Enable verbose logging
             profile_manager: Optional profile manager for resilience
             event_callback: Optional callback for observability events
@@ -61,7 +63,7 @@ class Agent:
             memory_provider: Optional memory provider for conversation history
             system_prompt_builder: Optional protocol for building system prompts
             billing_hook: Optional hook for tracking costs
-            max_rounds: Maximum conversation rounds (replaces max_iterations)
+            max_rounds: Maximum conversation rounds (replaces max_rounds)
             max_rounds_with_plan: Maximum rounds after plan tool is used
         """
         self.name = name
@@ -72,6 +74,7 @@ class Agent:
         self.on_tool_start = on_tool_start
         self.on_tool_end = on_tool_end
         self.on_tool_call_delta = on_tool_call_delta
+        self.on_text_delta = on_text_delta
         self.verbose = verbose
 
         # Enhanced subsystems
@@ -298,6 +301,15 @@ class Agent:
                 ):
                     if chunk.content:
                         response_content += chunk.content
+                        # 触发文本流式回调（如果有）
+                        if self.on_text_delta:
+                            try:
+                                if asyncio.iscoroutinefunction(self.on_text_delta):
+                                    await self.on_text_delta(chunk.content)
+                                else:
+                                    self.on_text_delta(chunk.content)
+                            except Exception as e:
+                                self._log(f"on_text_delta callback failed: {e}")
                     if hasattr(chunk, "tool_calls") and chunk.tool_calls:
                         # 触发流式 tool_calls 回调（如果有）
                         if self.on_tool_call_delta:
