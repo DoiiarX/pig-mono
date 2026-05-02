@@ -351,20 +351,11 @@ class Agent:
                     except json.JSONDecodeError as e:
                         # Construct error message for LLM
                         error_message = (
-                            f"⚠️ 工具调用参数 JSON 格式错误\n\n"
-                            f"工具名称：{tool_name}\n"
-                            f"错误详情：{str(e)}\n"
-                            f"错误位置：第 {e.pos} 个字符\n\n"
-                            f"可能原因：\n"
-                            f"1. 参数过长导致响应被截断（当前已生成 {e.pos} 字符）\n"
-                            f"2. 生成的内容超过了模型输出限制\n"
-                            f"3. 可能陷入了重复生成超长内容的模式\n\n"
-                            f"建议操作：\n"
-                            f"1. 简化参数内容，减少描述长度（如：镜头描述控制在 300 字以内）\n"
-                            f"2. 减少数量（如：分镜控制在 10 个镜头以内）\n"
-                            f"3. 分批处理，将大任务拆分为多个小任务\n"
-                            f"4. 重新调用工具，使用更简洁的参数\n\n"
-                            f"请重新尝试，确保参数符合工具的长度限制。"
+                            f"Tool call argument parsing failed: {str(e)}\n"
+                            f"Position: character {e.pos}\n"
+                            f"Tool: {tool_name}\n\n"
+                            f"The JSON arguments may be truncated or malformed. "
+                            f"Please retry with valid JSON parameters."
                         )
 
                         # Add error as tool result and continue to next iteration
