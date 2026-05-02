@@ -344,7 +344,40 @@ class Agent:
                 for tool_call in response_tool_calls:
                     tool_name = tool_call.get("function", {}).get("name")
                     tool_args_str = tool_call.get("function", {}).get("arguments", "{}")
-                    tool_args = json.loads(tool_args_str)
+
+                    # Try to parse JSON arguments, handle parse errors gracefully
+                    try:
+                        tool_args = json.loads(tool_args_str)
+                    except json.JSONDecodeError as e:
+                        # Construct error message for LLM
+                        error_message = (
+                            f"⚠️ 工具调用参数 JSON 格式错误\n\n"
+                            f"工具名称：{tool_name}\n"
+                            f"错误详情：{str(e)}\n"
+                            f"错误位置：第 {e.pos} 个字符\n\n"
+                            f"可能原因：\n"
+                            f"1. 参数过长导致响应被截断（当前已生成 {e.pos} 字符）\n"
+                            f"2. 生成的内容超过了模型输出限制\n"
+                            f"3. 可能陷入了重复生成超长内容的模式\n\n"
+                            f"建议操作：\n"
+                            f"1. 简化参数内容，减少描述长度（如：镜头描述控制在 300 字以内）\n"
+                            f"2. 减少数量（如：分镜控制在 10 个镜头以内）\n"
+                            f"3. 分批处理，将大任务拆分为多个小任务\n"
+                            f"4. 重新调用工具，使用更简洁的参数\n\n"
+                            f"请重新尝试，确保参数符合工具的长度限制。"
+                        )
+
+                        # Add error as tool result and continue to next iteration
+                        tool_results.append(
+                            {
+                                "tool_call_id": tool_call.get("id"),
+                                "role": "tool",
+                                "name": tool_name,
+                                "content": error_message,
+                            }
+                        )
+                        self._log(f"✗ JSON parse error for tool {tool_name}: {str(e)}")
+                        continue  # Skip to next tool call
 
                     self._log(f"→ Calling tool: {tool_name}({tool_args})")
 
