@@ -339,9 +339,8 @@ class Agent:
             if response_tool_calls:
                 self._log(f"Tool calls requested: {len(response_tool_calls)}")
 
-                # Execute tools
-                tool_results = []
-                for tool_call in response_tool_calls:
+                # Execute tools in parallel
+                async def execute_tool(tool_call):
                     tool_name = tool_call.get("function", {}).get("name")
                     tool_args_str = tool_call.get("function", {}).get("arguments", "{}")
 
@@ -357,18 +356,13 @@ class Agent:
                             f"The JSON arguments may be truncated or malformed. "
                             f"Please retry with valid JSON parameters."
                         )
-
-                        # Add error as tool result and continue to next iteration
-                        tool_results.append(
-                            {
-                                "tool_call_id": tool_call.get("id"),
-                                "role": "tool",
-                                "name": tool_name,
-                                "content": error_message,
-                            }
-                        )
                         self._log(f"✗ JSON parse error for tool {tool_name}: {str(e)}")
-                        continue  # Skip to next tool call
+                        return {
+                            "tool_call_id": tool_call.get("id"),
+                            "role": "tool",
+                            "name": tool_name,
+                            "content": error_message,
+                        }
 
                     self._log(f"→ Calling tool: {tool_name}({tool_args})")
 
@@ -402,29 +396,29 @@ class Agent:
                             meta={},
                         )
 
-                        tool_results.append(
-                            {
-                                "tool_call_id": tool_call.get("id"),
-                                "role": "tool",
-                                "name": tool_name,
-                                "content": str(result.data if result.ok else result.error),
-                            }
-                        )
                         self._log(f"✓ Result: {result.data if result.ok else result.error}")
 
                         if self.on_tool_end:
                             self.on_tool_end(tool_name, result)
+
+                        return {
+                            "tool_call_id": tool_call.get("id"),
+                            "role": "tool",
+                            "name": tool_name,
+                            "content": str(result.data if result.ok else result.error),
+                        }
                     except Exception as e:
                         error_msg = f"Error: {e}"
-                        tool_results.append(
-                            {
-                                "tool_call_id": tool_call.get("id"),
-                                "role": "tool",
-                                "name": tool_name,
-                                "content": error_msg,
-                            }
-                        )
                         self._log(f"✗ {error_msg}")
+                        return {
+                            "tool_call_id": tool_call.get("id"),
+                            "role": "tool",
+                            "name": tool_name,
+                            "content": error_msg,
+                        }
+
+                # Execute all tools in parallel
+                tool_results = await asyncio.gather(*[execute_tool(tc) for tc in response_tool_calls])
 
                 # Add assistant message and tool results to history
                 self.history.append(
