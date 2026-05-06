@@ -393,7 +393,7 @@ class Agent:
                         result = await self.registry.execute(
                             tool_call=tool_call_obj,
                             user_id="default",  # TODO: Make configurable
-                            meta={},
+                            meta={"tool_call_id": tool_call.get("id")},
                         )
 
                         self._log(f"✓ Result: {result.data if result.ok else result.error}")
