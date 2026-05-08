@@ -343,6 +343,7 @@ class Agent:
                 async def execute_tool(tool_call):
                     tool_name = tool_call.get("function", {}).get("name")
                     tool_args_str = tool_call.get("function", {}).get("arguments", "{}")
+                    tool_call_id = tool_call.get("id")
 
                     # Try to parse JSON arguments, handle parse errors gracefully
                     try:
@@ -358,7 +359,7 @@ class Agent:
                         )
                         self._log(f"✗ JSON parse error for tool {tool_name}: {str(e)}")
                         return {
-                            "tool_call_id": tool_call.get("id"),
+                            "tool_call_id": tool_call_id,
                             "role": "tool",
                             "name": tool_name,
                             "content": error_message,
@@ -383,17 +384,22 @@ class Agent:
                         from types import SimpleNamespace
 
                         tool_call_obj = SimpleNamespace(
+                            id=tool_call_id,
                             function=SimpleNamespace(
                                 name=tool_name,
                                 arguments=tool_args_str,
                             )
                         )
 
+                        tool_meta = dict(tool_call.get("meta") or {})
+                        if tool_call_id and not tool_meta.get("tool_call_id"):
+                            tool_meta["tool_call_id"] = tool_call_id
+
                         # Use enhanced registry execute
                         result = await self.registry.execute(
                             tool_call=tool_call_obj,
                             user_id="default",  # TODO: Make configurable
-                            meta={"tool_call_id": tool_call.get("id")},
+                            meta=tool_meta,
                         )
 
                         self._log(f"✓ Result: {result.data if result.ok else result.error}")
@@ -402,7 +408,7 @@ class Agent:
                             self.on_tool_end(tool_name, result)
 
                         return {
-                            "tool_call_id": tool_call.get("id"),
+                            "tool_call_id": tool_call_id,
                             "role": "tool",
                             "name": tool_name,
                             "content": str(result.data if result.ok else result.error),
@@ -411,7 +417,7 @@ class Agent:
                         error_msg = f"Error: {e}"
                         self._log(f"✗ {error_msg}")
                         return {
-                            "tool_call_id": tool_call.get("id"),
+                            "tool_call_id": tool_call_id,
                             "role": "tool",
                             "name": tool_name,
                             "content": error_msg,
